@@ -1,0 +1,111 @@
+﻿================================================================
+  KHO SESSION CLAUDE
+  Xem mọi session Claude Code ở một nơi, và cho mọi tài khoản
+  Claude Desktop trên máy cùng thấy chung session.
+================================================================
+
+TOOL NÀY LÀM GÌ
+  - Liệt kê tất cả session Claude Code trên máy (mọi project, mọi
+    tài khoản), tìm kiếm và xem lại nội dung.
+  - Mở lại bất kỳ session nào trong Claude Desktop — kể cả session
+    tạo từ terminal — KHÔNG cần khởi động lại app.
+  - "Thêm tất cả session vào mọi tài khoản": mọi tài khoản đăng nhập trên
+    máy đều thấy đủ session trong sidebar Claude Desktop.
+
+  Tool chạy HOÀN TOÀN TRÊN MÁY BẠN (địa chỉ 127.0.0.1), không gửi
+  gì lên mạng. Nó chỉ đọc/chép các file session sẵn có trên máy, và
+  nhờ chính Claude Desktop nhập session qua link claude://resume.
+
+CẦN GÌ TRƯỚC
+  - KHÔNG cần cài gì thêm: tool chạy bằng PowerShell có sẵn trong
+    Windows 10/11. Không cần quyền admin.
+  - Đã dùng Claude Code qua Claude Desktop ít nhất một lần.
+
+CÀI ĐẶT
+  0. (Nếu nhận file zip qua mạng/Teams/email) TRƯỚC KHI giải nén:
+     chuột phải file zip -> Properties -> tích "Unblock" -> OK.
+     Không làm thì lần chạy đầu Windows có thể hỏi "Security Warning"
+     -> bấm Run (hoặc "More info" -> "Run anyway").
+  1. Giải nén, chép cả thư mục này vào đâu cũng được, ví dụ Desktop.
+  2. Nhấp đúp file "Kho session Claude.bat".
+  3. Trình duyệt sẽ tự mở trang của tool. Xong.
+  (Cửa sổ đen hiện ra là tool đang chạy nền. Đóng nó để tắt tool.)
+
+DÙNG HẰNG NGÀY (chỉ 2 việc)
+  1) "Mở trong Claude Desktop" — CHỈ session đang chọn:
+     chọn session bên trái -> bấm nút (hoặc nhấp đúp, hoặc Enter).
+       + Tài khoản đang đăng nhập: session vào ngay và app mở tới nó.
+       + Đồng thời session đó được chép sang các tài khoản khác
+         (thấy khi bạn chuyển sang). Dòng chữ nhỏ dưới nút ghi rõ
+         sẽ chép sang tài khoản nào.
+     Dùng được cả cho session "chưa có trong app" (tạo từ terminal).
+     Tìm nhanh: gõ vào ô tìm (phím / để nhảy tới ô tìm).
+
+  2) "Thêm tất cả session vào mọi tài khoản" (nút xanh trên cùng)
+     — TẤT CẢ session đã có trong Claude Desktop, không riêng
+     session đang chọn:
+       + Tài khoản ĐANG ĐĂNG NHẬP nhận các session còn thiếu, thấy
+         ngay. App sẽ tự chuyển lần lượt qua từng session vừa thêm
+         (khoảng 2 giây mỗi session) — cứ để nó chạy xong.
+       + Các tài khoản khác thấy khi bạn chuyển sang tài khoản đó.
+       + KHÔNG gồm session "chưa có trong app" (tạo từ terminal);
+         muốn thì mở từng cái bằng nút ở mục 1.
+     Trước khi chạy, tool hỏi lại và ghi rõ số session, tên tài khoản.
+
+  Ít khi cần (nút "⋯" góc trên, hoặc nút xám cạnh nút Mở):
+  - Gỡ session khỏi các tài khoản không phải gốc. Ở tài khoản khác
+    thì gỡ ngay. Ở tài khoản ĐANG ĐĂNG NHẬP, Claude Desktop chỉ gỡ
+    được khi app tắt hẳn, nên tool sẽ hỏi rồi tự tắt -> gỡ -> mở lại
+    app (khoảng 10 giây). Luồng Claude đang chạy trong app sẽ dừng,
+    nên chỉ đồng ý khi đã xong việc đang chạy.
+
+  Mẹo:
+  - Ô lọc cạnh ô tìm: chọn một tài khoản để xem nó đang có bao nhiêu
+    session, chia ra 3 nút: "Tất cả" / "Tự tạo" (chỉ session do chính
+    tài khoản đó tạo) / "Được thêm vào" (từ tài khoản khác chép sang).
+    Chọn "Chưa có trong app" để xem session tạo từ terminal.
+  - Session tạo từ terminal khi vào app có thể chưa có tên ở tài
+    khoản đang đăng nhập — đặt tên trong app như bình thường.
+  - Session bị gạch ngang là đã mất thư mục project, không mở được.
+
+TÊN TÀI KHOẢN
+  Tool tự học tên: mỗi lần bạn đăng nhập một tài khoản rồi mở tool,
+  nó ghi tên tài khoản đó lại. Đăng nhập lần lượt từng tài khoản,
+  mỗi lần mở tool một cái, là đủ tên cho tất cả.
+  Muốn tự đặt tên cho gọn, sửa file (tạo tự động sau lần chạy đầu):
+    C:\Users\<tên bạn>\.claude\cs-accounts.txt
+
+LƯU Ý QUYỀN RIÊNG TƯ (QUAN TRỌNG)
+  Khi một session đã được "thêm vào mọi tài khoản", thì BẤT KỲ AI
+  đăng nhập một trong các tài khoản đó TRÊN MÁY NÀY đều đọc được
+  nội dung chat của session. Chỉ đồng bộ những gì bạn chấp nhận
+  chia sẻ. Dùng "⋯" -> "Gỡ tất cả khỏi tài khoản khác" để thu lại.
+
+AN TOÀN DỮ LIỆU
+  Trước mỗi lần thay đổi, tool tự sao lưu vào:
+    C:\Users\<tên bạn>\.claude\cs-backups  (giữ 5 bản gần nhất)
+  Nếu cần khôi phục, tắt Claude Desktop rồi chép bản sao lưu mới
+  nhất đè lại thư mục claude-code-sessions.
+
+GẶP LỖI
+  - Cửa sổ đen báo lỗi đỏ và dừng ngay: có thể máy bị chính sách
+    công ty chặn chạy script PowerShell — nhờ IT kiểm tra.
+  - Mở ra trang cũ / thiếu nút: đóng cửa sổ đen cũ rồi chạy lại.
+  - Không thấy session nào: hãy mở Claude Desktop và dùng Claude
+    Code ít nhất một lần, rồi mở lại tool.
+  - Dòng trên cùng báo "Chưa thấy dữ liệu Claude Desktop": nút
+    "Mở trong Claude Desktop" vẫn dùng được. Nếu mở xong vẫn báo vậy,
+    chụp cửa sổ đen (dòng "Chua thay thu muc Claude Desktop...")
+    gửi người làm tool.
+  - Lần mở đầu mất vài giây để quét session (file chat lớn), các lần
+    sau nhanh.
+
+TÙY CHỌN NÂNG CAO (không bắt buộc)
+  Đặt biến môi trường trước khi chạy:
+    CS_PORT=xxxx        đổi cổng (mặc định 4777)
+
+CÁC FILE TRONG THƯ MỤC
+  Kho session Claude.bat   nhấp đúp để chạy
+  cs-gui.ps1               chương trình (PowerShell)
+  ui.html                  giao diện
+================================================================

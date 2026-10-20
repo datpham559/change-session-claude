@@ -1,0 +1,5 @@
+# Giữ nguyên từng byte của file tool: .bat xuống dòng LF dễ chạy sai, .ps1/.txt mất BOM thì hỏng tiếng Việt.
+*.bat  -text
+*.ps1  -text
+*.html -text
+*.txt  -text

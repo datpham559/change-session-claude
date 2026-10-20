@@ -1,0 +1,4 @@
+# Gói zip tạo bằng dong-goi.ps1 (tải bản mới nhất bằng Code -> Download ZIP)
+Kho-session-Claude.zip
+# File tạm khi ghi nguyên tử
+*.cs-tmp

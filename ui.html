@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kho session Claude</title>
+<style>
+:root{
+  --bg:#F6F7F9; --surface:#FFFFFF; --ink:#1C2430; --muted:#6B7686; --line:#DDE2E8;
+  --accent:#2F5BD3; --accent-ink:#FFFFFF; --sel:#E8EEFC; --warn:#A8670F; --me:#EEF1F5; --danger:#B42318;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#15191F; --surface:#1D232B; --ink:#E6EAF0; --muted:#8C96A3; --line:#2A323C;
+    --accent:#7A9CF5; --accent-ink:#0F1520; --sel:#25324D; --warn:#E0A54A; --me:#242C36; --danger:#F07A6E; }
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI Variable","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;display:flex;flex-direction:column}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
+.brand{margin-right:auto;min-width:0}
+.brand h1{font-size:16px;font-weight:650;margin:0;letter-spacing:-.01em}
+#acct{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#acct b{color:var(--ink);font-weight:600}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 14px;cursor:pointer;white-space:nowrap}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.link{border:0;background:none;color:var(--muted);padding:6px 8px}
+.btn.link:hover:not(:disabled){color:var(--danger)}
+.more{position:relative}
+.more summary{list-style:none;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-weight:700;letter-spacing:1px;color:var(--muted);user-select:none}
+.more summary::-webkit-details-marker{display:none}
+.more[open] summary{border-color:var(--muted);color:var(--ink)}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;min-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.menu button{display:block;width:100%;text-align:left;border:0;background:none;border-radius:6px;padding:8px 10px;cursor:pointer}
+.menu button:hover:not(:disabled){background:var(--me)}
+.menu small{display:block;color:var(--muted);font-size:12px}
+main{flex:1;display:grid;grid-template-columns:minmax(300px,400px) 1fr;min-height:0}
+aside{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0;background:var(--surface)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;padding:12px}
+.filters input,.filters select{min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 10px}
+.filters input{flex:1 1 180px}
+.filters select{flex:1 1 140px}
+.seg{display:flex;gap:4px;margin:0 12px 10px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:9px}
+.seg button{flex:1;border:0;background:none;border-radius:6px;padding:5px 6px;cursor:pointer;font-size:13px;color:var(--muted);white-space:nowrap}
+.seg button b{font-weight:650;color:var(--ink);margin-left:3px}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.seg button:disabled{opacity:.45;cursor:default}
+#count{padding:0 14px 6px;color:var(--muted);font-size:12px}
+#list{flex:1;overflow:auto;padding:0 6px 12px}
+.item{display:block;width:100%;text-align:left;border:0;background:none;border-radius:8px;padding:9px 10px;cursor:pointer}
+.item:hover{background:var(--me)}
+.item.on{background:var(--sel)}
+.item .t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:550}
+.item .m{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:3px;font-size:12px;color:var(--muted)}
+.item .w{color:var(--warn)}
+.item.gone .t{color:var(--muted);text-decoration:line-through}
+.badge{display:inline-block;background:var(--sel);color:var(--accent);border-radius:5px;padding:0 6px;font-size:11px;font-weight:650}
+.badge.new{background:none;border:1px dashed var(--muted);color:var(--muted);font-weight:500}
+section{display:flex;flex-direction:column;min-height:0;min-width:0}
+.head{padding:18px 24px 14px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.head .info{flex:1 1 320px;min-width:0}
+.head h2{font-size:18px;line-height:1.3;margin:0 0 6px;font-weight:650;letter-spacing:-.01em}
+.head .sub{font-size:12px;color:var(--muted);word-break:break-all}
+.head .note{font-size:12px;color:var(--warn);margin-top:6px}
+.acts{display:flex;flex-direction:column;align-items:flex-end;gap:5px;max-width:360px}
+.acts .row{display:flex;gap:6px;align-items:center}
+.hint{font-size:12px;color:var(--muted);text-align:right}
+.hint b{color:var(--ink);font-weight:600}
+#chat{flex:1;overflow:auto;padding:20px 24px 40px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:760px;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--me);border-radius:12px;padding:10px 14px;max-width:min(620px,85%)}
+.msg.assistant{padding:2px}
+.msg.divider{align-self:stretch;max-width:none;text-align:center;font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px;margin-top:6px}
+.msg .who{font-size:12px;color:var(--muted);margin-bottom:3px}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:360px}
+.empty strong{display:block;color:var(--ink);font-size:15px;margin-bottom:6px}
+.empty ol{text-align:left;margin:10px 0 0;padding-left:20px}
+.empty li{margin:4px 0}
+kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font:12px/1.6 inherit;background:var(--surface)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;transition:.2s;pointer-events:none;max-width:min(560px,90vw)}
+#toast.show{opacity:1;transform:translateX(-50%)}
+@media (prefers-reduced-motion: reduce){#toast{transition:none}}
+@media (max-width:760px){
+  header{flex-wrap:wrap;padding:10px 16px}
+  main{grid-template-columns:1fr;grid-template-rows:45% 55%}
+  aside{border-right:0;border-bottom:1px solid var(--line)}
+  .head,#chat{padding-left:16px;padding-right:16px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Kho session Claude</h1>
+    <div id="acct">Đang kiểm tra tài khoản…</div>
+  </div>
+  <button class="btn primary" id="syncAll" title="Áp dụng cho TẤT CẢ session đã có trong Claude Desktop, không riêng session đang chọn">Thêm tất cả session vào mọi tài khoản</button>
+  <details class="more" id="more">
+    <summary aria-label="Thêm tùy chọn" title="Thêm tùy chọn">⋯</summary>
+    <div class="menu">
+      <button id="removeAll">Gỡ tất cả khỏi tài khoản khác<small>Mỗi session chỉ còn ở tài khoản đã tạo ra nó</small></button>
+      <button id="restart">Khởi động lại Claude Desktop<small>Thường không cần — tool tự làm khi cần</small></button>
+    </div>
+  </details>
+</header>
+<main>
+  <aside>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Tìm session hoặc project…" autocomplete="off" autofocus>
+      <select id="acctf" aria-label="Lọc theo tài khoản" autocomplete="off"></select>
+    </div>
+    <div class="seg" id="seg" role="group" aria-label="Loại session trong tài khoản" hidden>
+      <button data-v="all" title="Mọi session tài khoản này đang thấy"></button>
+      <button data-v="own" title="Chỉ session do chính tài khoản này tạo ra"></button>
+      <button data-v="added" title="Session từ tài khoản khác được thêm vào tài khoản này"></button>
+    </div>
+    <div id="count">Đang đọc danh sách session…</div>
+    <div id="list" role="listbox" aria-label="Danh sách session"></div>
+  </aside>
+  <section>
+    <div class="head" id="head" hidden>
+      <div class="info">
+        <h2 id="title"></h2>
+        <div class="sub" id="path"></div>
+        <div class="sub" id="where"></div>
+        <div class="note" id="note"></div>
+      </div>
+      <div class="acts">
+        <div class="row">
+          <button class="btn link" id="removeOthers"></button>
+          <button class="btn primary" id="openDesk" title="Chỉ session đang chọn (Enter)">Mở trong Claude Desktop</button>
+        </div>
+        <div class="hint" id="hint"></div>
+      </div>
+    </div>
+    <div id="chat">
+      <div class="empty">
+        <strong>Chọn một session để xem lại</strong>
+        <ol>
+          <li>Chọn session bên trái (dùng <kbd>↑</kbd> <kbd>↓</kbd> hoặc ô tìm).</li>
+          <li><b>Mở trong Claude Desktop</b> (hoặc <kbd>Enter</kbd>, nhấp đúp): chỉ <b>session đó</b> — mở ở tài khoản đang đăng nhập và chép sang các tài khoản khác.</li>
+          <li><b>Thêm tất cả session vào mọi tài khoản</b> (nút xanh trên cùng): làm việc trên cho <b>mọi session</b> đã có trong Claude Desktop cùng lúc.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+var TOKEN = '__TOKEN__';
+var NOT_IN_APP = '__none__';
+var all = [], view = [], selId = null, timer = null, busy = false, me = null, accts = [], mode = 'all';
+function $(s){ return document.querySelector(s); }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function ago(ms){
+  var m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 1) return 'vừa xong';
+  if (m < 60) return m + ' phút trước';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + ' giờ trước';
+  var d = Math.floor(h / 24);
+  return d < 30 ? d + ' ngày trước' : new Date(ms).toLocaleDateString('vi-VN');
+}
+function toast(t, ms){ var el = $('#toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(function(){ el.classList.remove('show'); }, ms || 3500); }
+function api(p, opt){
+  opt = opt || {};
+  opt.headers = { 'X-Token': TOKEN, 'Content-Type': 'application/json' };
+  return fetch(p, opt).then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.error || 'Có lỗi xảy ra.'); return j; }); });
+}
+// Khóa các nút trong lúc tool đang làm việc (nhập/gỡ/khởi động lại)
+function setBusy(on){
+  busy = on;
+  ['#syncAll', '#removeAll', '#restart', '#removeOthers'].forEach(function(s){ $(s).disabled = on; });
+  if (on) $('#openDesk').disabled = true; else refreshActs();
+  document.body.style.cursor = on ? 'progress' : '';
+}
+function run(promise){
+  setBusy(true);
+  return promise.then(function(r){ if (r && r.message) toast(r.message, 10000); return load(); })
+    .catch(function(e){ toast(e.message, 8000); })
+    .then(function(){ setBusy(false); });
+}
+
+function load(){
+  return api('/api/sessions').then(function(d){
+    all = d.sessions;
+    $('#acct').innerHTML = d.account ? 'Claude Desktop đang dùng tài khoản: <b>' + esc(d.account) + '</b>'
+      : !d.desk ? 'Chưa thấy dữ liệu Claude Desktop trên máy này — nút “Mở trong Claude Desktop” vẫn dùng được'
+      : 'Chưa nhận ra tài khoản đang dùng — bấm vào một session trong Claude Desktop rồi quay lại đây';
+    $('#acct').title = !d.desk ? 'Chưa từng dùng Claude Code trong Claude Desktop thì chưa có thư mục này; mở một session là app tự tạo. Thư mục tool đã tìm in ở cửa sổ đen.'
+      : 'Nhận ra theo session bạn bấm gần nhất trong Claude Desktop. Vừa đổi tài khoản thì bấm một session bên đó trước. Đặt tên tài khoản trong file .claude\\cs-accounts.txt';
+    me = d.me;
+    accts = d.accts || [];
+    // Số session MỖI tài khoản đang có (tự tạo + được thêm vào); tài khoản đang đăng nhập lên đầu
+    var sel = $('#acctf'), cur = sel.value, has = {}, none = 0;
+    all.forEach(function(s){
+      (s.accounts || []).forEach(function(a){ has[a] = (has[a] || 0) + 1; });
+      if (!s.desktop) none++;
+    });
+    var names = Object.keys(has).sort(function(a, b){ return (b === me) - (a === me) || a.localeCompare(b); });
+    sel.innerHTML = '<option value="">Mọi tài khoản (' + all.length + ')</option>' +
+      names.map(function(a){ return '<option value="' + esc(a) + '">' + esc(a) + (a === me ? ' · đang đăng nhập' : '') + ' (' + has[a] + ')</option>'; }).join('') +
+      (none ? '<option value="' + NOT_IN_APP + '">Chưa có trong app (' + none + ')</option>' : '');
+    sel.value = cur;
+    if (sel.value !== cur) sel.value = '';
+    apply();
+    if (!all.length) $('#chat').innerHTML = '<div class="empty"><strong>Chưa có session nào</strong>Không thấy file session trong ' + esc(d.root) + '.</div>';
+    else if (selId) select(selId, false, true);
+  }).catch(function(e){ toast(e.message); });
+}
+
+function apply(){
+  var q = $('#q').value.trim().toLowerCase(), a = $('#acctf').value;
+  var inAcct = function(s){ return (s.accounts || []).indexOf(a) >= 0; };
+  // Chọn một tài khoản: hiện thống kê + lọc Tất cả / Tự tạo / Được thêm vào
+  var showSeg = !!a && a !== NOT_IN_APP;
+  $('#seg').hidden = !showSeg;
+  if (showSeg){
+    var n = { all: 0, own: 0, added: 0 };
+    all.forEach(function(s){ if (inAcct(s)){ n.all++; if (s.origin === a) n.own++; else n.added++; } });
+    var label = { all: 'Tất cả', own: 'Tự tạo', added: 'Được thêm vào' };
+    document.querySelectorAll('#seg button').forEach(function(b){
+      var v = b.dataset.v;
+      b.innerHTML = label[v] + '<b>' + n[v] + '</b>';
+      b.classList.toggle('on', v === mode);
+      b.setAttribute('aria-pressed', v === mode);
+    });
+  }
+  view = all.filter(function(s){
+    if (a === NOT_IN_APP){ if (s.desktop) return false; }
+    else if (a){
+      if (!inAcct(s)) return false;
+      if (mode === 'own' && s.origin !== a) return false;
+      if (mode === 'added' && s.origin === a) return false;
+    }
+    return !q || (s.title + ' ' + s.cwd).toLowerCase().indexOf(q) >= 0;
+  });
+  $('#count').textContent = view.length + ' session';
+  $('#list').innerHTML = view.map(function(s){
+    var meta = [];
+    if (s.origin) meta.push('<span class="badge">' + esc(s.origin) + '</span>');
+    else meta.push('<span class="badge new">chưa có trong app</span>');
+    meta.push('<span>' + esc(s.project) + '</span>');
+    meta.push('<span>' + ago(s.mtime) + '</span>');
+    if (s.mb > 5) meta.push('<span class="w">nặng ' + s.mb + ' MB</span>');
+    return '<button class="item' + (s.id === selId ? ' on' : '') + (s.exists ? '' : ' gone') + '" role="option" data-id="' + s.id + '">' +
+      '<span class="t">' + esc(s.title) + '</span><span class="m">' + meta.join('') + '</span></button>';
+  }).join('');
+}
+
+function current(){ return all.find(function(x){ return x.id === selId; }); }
+function others(s){ return (s.accounts || []).filter(function(a){ return a !== s.origin; }); }
+
+function refreshActs(){
+  var s = current();
+  if (!s) return;
+  $('#openDesk').disabled = busy || !s.exists;
+  var o = others(s);
+  $('#removeOthers').hidden = !s.desktop || o.length === 0;
+  $('#removeOthers').textContent = 'Gỡ khỏi ' + o.length + ' tài khoản khác';
+  $('#removeOthers').title = 'Chỉ giữ ở tài khoản gốc (' + (s.origin || '') + '). File chat vẫn còn.';
+  $('#hint').innerHTML = s.exists ? openHint(s) : '';
+}
+
+// Nói rõ nút Mở sẽ làm gì với ĐÚNG session này
+function openHint(s){
+  var has = s.accounts || [];
+  var meName = me ? '<b>' + esc(me) + '</b>' : 'tài khoản đang đăng nhập';
+  var first = has.indexOf(me) >= 0 ? 'Chỉ session này: mở ở ' + meName : 'Chỉ session này: thêm vào ' + meName + ' (hiện ngay)';
+  var missing = accts.filter(function(a){ return a !== me && has.indexOf(a) < 0; });
+  return first + (missing.length ? ', và chép sang ' + missing.map(function(a){ return '<b>' + esc(a) + '</b>'; }).join(', ') + ' (thấy khi chuyển sang).' : '. Các tài khoản khác đã có.');
+}
+
+function select(id, scroll, keepChat){
+  selId = id;
+  var s = current();
+  document.querySelectorAll('.item').forEach(function(el){ el.classList.toggle('on', el.dataset.id === id); });
+  if (!s) return;
+  if (scroll){ var el = document.querySelector('.item[data-id="' + id + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); }
+  $('#head').hidden = false;
+  $('#title').textContent = s.title;
+  $('#path').textContent = s.cwd + (s.count > 1 ? '  ·  ' + s.count + ' phần nối tiếp' : '');
+  $('#where').textContent = s.desktop
+    ? 'Có ở: ' + s.accounts.join(', ') + (s.origin ? '  ·  gốc: ' + s.origin : '')
+    : 'Chưa có trong Claude Desktop — bấm Mở để đưa vào.';
+  $('#note').textContent = !s.exists ? 'Thư mục project không còn tồn tại nên không mở lại được.'
+    : s.mb > 5 ? 'Session này rất nặng. Sau khi mở, nên gõ /compact trước khi làm tiếp để đỡ tốn limit.' : '';
+  refreshActs();
+  if (keepChat) return;
+  clearTimeout(timer);
+  $('#chat').innerHTML = '<div class="empty">Đang tải nội dung…</div>';
+  timer = setTimeout(function(){
+    api('/api/preview?id=' + encodeURIComponent(id)).then(function(d){
+      if (selId !== id) return;
+      if (!d.messages.length){ $('#chat').innerHTML = '<div class="empty">Không có tin nhắn dạng chữ để xem trước.</div>'; return; }
+      $('#chat').innerHTML = d.messages.map(function(m){
+        if (m.role === 'divider') return '<div class="msg divider">' + esc(m.text) + '</div>';
+        return '<div class="msg ' + m.role + '"><div class="who">' + (m.role === 'user' ? 'Bạn' : 'Claude') + '</div>' + esc(m.text) + '</div>';
+      }).join('');
+      $('#chat').scrollTop = $('#chat').scrollHeight;
+    }).catch(function(e){ $('#chat').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+  }, 120);
+}
+
+function openDesk(){
+  var s = current();
+  if (!s || busy || !s.exists) return;
+  toast('Đang mở trong Claude Desktop…', 15000);
+  run(api('/api/open-desktop', { method: 'POST', body: JSON.stringify({ id: s.id }) }));
+}
+
+// Gỡ khỏi tài khoản đang đăng nhập cần tắt rồi mở lại Claude Desktop (app không gỡ nóng được).
+function doRemove(path, body, c){
+  body.restart = c.live > 0 && confirm(c.live + ' thẻ nằm ở tài khoản bạn ĐANG ĐĂNG NHẬP. Claude Desktop chỉ gỡ được khi app tắt hẳn, nên tool sẽ tự tắt rồi mở lại app (khoảng 10 giây). Các luồng Claude đang chạy trong app sẽ dừng.\n\nOK = gỡ luôn ở tài khoản này (khởi động lại app)\nHủy = chỉ gỡ ở các tài khoản khác');
+  toast(body.restart ? 'Đang gỡ và khởi động lại Claude Desktop…' : 'Đang gỡ…', 15000);
+  return run(api(path, { method: 'POST', body: JSON.stringify(body) }));
+}
+
+function removeOthers(){
+  var s = current();
+  if (!s || busy) return;
+  api('/api/remove-others?id=' + encodeURIComponent(s.id)).then(function(c){
+    if (c.message){ toast(c.message); return; }
+    if (!confirm('Gỡ “' + s.title + '” khỏi ' + others(s).join(', ') + '?\nChỉ giữ ở tài khoản gốc (' + s.origin + '). File chat vẫn còn, mở lại lúc nào cũng được.')) return;
+    return doRemove('/api/remove-others', { id: s.id }, c);
+  }).catch(function(e){ toast(e.message, 7000); });
+}
+
+$('#list').addEventListener('click', function(e){ var b = e.target.closest('.item'); if (b) select(b.dataset.id); });
+$('#list').addEventListener('dblclick', function(e){ var b = e.target.closest('.item'); if (b){ select(b.dataset.id); openDesk(); } });
+$('#openDesk').addEventListener('click', openDesk);
+$('#removeOthers').addEventListener('click', removeOthers);
+$('#syncAll').addEventListener('click', function(){
+  if (busy) return;
+  api('/api/sync-all').then(function(c){
+    if (!c.links && !c.copies){ toast('Mọi tài khoản đã có đủ session rồi.'); return; }
+    var notInApp = all.filter(function(s){ return !s.desktop; }).length;
+    var lines = ['Thêm TẤT CẢ ' + c.total + ' session đang có trong Claude Desktop vào mọi tài khoản?',
+      '(Áp dụng cho mọi session, không riêng session đang chọn.)', ''];
+    if (c.links) lines.push('• ' + (c.me || 'Tài khoản đang đăng nhập') + ' (đang đăng nhập): thêm ' + c.links + ' session còn thiếu — hiện ngay. Claude Desktop sẽ lần lượt chuyển qua từng session (~2 giây/session).');
+    if (c.copyAccts && c.copyAccts.length) lines.push('• Chép ' + c.copySessions + ' session sang ' + c.copyAccts.join(', ') + ' — thấy khi bạn chuyển sang tài khoản đó.');
+    if (c.running && !c.hot) lines.push('• Không xác định được tài khoản đang đăng nhập nên cần khởi động lại app mới thấy.');
+    if (notInApp) lines.push('• KHÔNG gồm ' + notInApp + ' session “chưa có trong app” (tạo từ terminal) — muốn thì mở từng cái bằng nút Mở trong Claude Desktop.');
+    lines.push('', 'Lưu ý: ai đăng nhập các tài khoản này trên máy này đều đọc được các đoạn chat.');
+    if (!confirm(lines.join('\n'))) return;
+    toast(c.links ? 'Đang thêm ' + c.links + ' session vào Claude Desktop…' : 'Đang chép…', Math.max(5000, c.links * 2500));
+    return run(api('/api/sync-all', { method: 'POST' }));
+  }).catch(function(e){ toast(e.message, 7000); });
+});
+$('#removeAll').addEventListener('click', function(){
+  $('#more').open = false;
+  if (busy) return;
+  api('/api/remove-all-others').then(function(c){
+    if (c.message){ toast(c.message); return; }
+    if (!confirm('Gỡ MỌI session khỏi các tài khoản không phải gốc (' + c.count + ' thẻ)?\nMỗi session chỉ còn ở tài khoản đã tạo ra nó. File chat vẫn còn.')) return;
+    return doRemove('/api/remove-all-others', {}, c);
+  }).catch(function(e){ toast(e.message, 7000); });
+});
+$('#restart').addEventListener('click', function(){
+  $('#more').open = false;
+  if (busy) return;
+  if (!confirm('Tắt rồi mở lại Claude Desktop?\nCác luồng Claude đang chạy trong app sẽ dừng.')) return;
+  toast('Đang khởi động lại Claude Desktop…', 15000);
+  run(api('/api/restart', { method: 'POST' }));
+});
+document.addEventListener('click', function(e){ if (!e.target.closest('#more')) $('#more').open = false; });
+$('#q').addEventListener('input', apply);
+$('#acctf').addEventListener('change', apply);
+$('#seg').addEventListener('click', function(e){ var b = e.target.closest('button'); if (b){ mode = b.dataset.v; apply(); } });
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape'){ $('#more').open = false; return; }
+  if (e.key === '/' && e.target.tagName !== 'INPUT'){ e.preventDefault(); $('#q').focus(); return; }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
+  if (e.target.tagName === 'SELECT' || e.target.closest('.menu, .acts')) return;
+  if (e.key === 'Enter'){ if (e.target.id === 'q' || e.target.classList.contains('item')){ e.preventDefault(); openDesk(); } return; }
+  if (!view.length) return;
+  e.preventDefault();
+  var i = view.findIndex(function(s){ return s.id === selId; });
+  i = e.key === 'ArrowDown' ? Math.min(view.length - 1, i + 1) : Math.max(0, i - 1);
+  select(view[i].id, true);
+});
+window.addEventListener('focus', function(){ if (!busy) load(); });
+load();
+</script>
+</body>
+</html>
