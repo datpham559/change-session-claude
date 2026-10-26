@@ -25,6 +25,34 @@ header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:
 .brand h1{font-size:16px;font-weight:650;margin:0;letter-spacing:-.01em}
 #acct{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #acct b{color:var(--ink);font-weight:600}
+#usage{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:5px;font-size:12px;color:var(--muted)}
+#usage .when{white-space:nowrap}
+#refresh{border:0;background:none;color:var(--muted);cursor:pointer;padding:0 4px;font-size:14px;line-height:1}
+#refresh:hover{color:var(--accent)}
+#refresh.spin{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){#refresh.spin{animation:none}}
+.ubar{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.ubar i{display:inline-block;width:42px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.ubar i s{display:block;height:100%;background:var(--accent)}
+.ubar.hi i s{background:var(--warn)} .ubar.full i s{background:var(--danger)}
+.ubar.hi em{color:var(--warn)} .ubar.full em{color:var(--danger)}
+.ubar em{font-style:normal;color:var(--ink)}
+.acctmenu .menu{min-width:340px;padding:8px}
+.arow{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px}
+.arow:hover{background:var(--me)}
+.arow .an{flex:1;min-width:0}
+.arow .an b{display:block;font-weight:600}
+.arow .an small{display:block;color:var(--muted);font-size:12px}
+.arow .btn{display:inline-block;width:auto;padding:4px 14px;border:1px solid var(--line);background:var(--surface)}
+.arow .btn:hover:not(:disabled){border-color:var(--accent);background:var(--surface)}
+.acctmenu summary{letter-spacing:0;font-weight:600;color:var(--ink);white-space:nowrap}
+.arow .an .rn{border:0;background:none;padding:0 0 0 6px;color:var(--muted);cursor:pointer;font-size:12px;display:inline;width:auto}
+.arow .an .rn:hover{color:var(--accent);background:none}
+.arow .an .bars{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:3px;font-size:12px;color:var(--muted)}
+.tag{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:0 6px;white-space:nowrap}
+.menu .foot{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.menu .warnline{color:var(--warn);font-size:12px;padding:6px 8px 2px}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 14px;cursor:pointer;white-space:nowrap}
 .btn:hover:not(:disabled){border-color:var(--muted)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
@@ -45,6 +73,8 @@ aside{display:flex;flex-direction:column;border-right:1px solid var(--line);min-
 .filters input,.filters select{min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 10px}
 .filters input{flex:1 1 180px}
 .filters select{flex:1 1 140px}
+.grp{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;gap:8px;padding:10px 10px 4px;background:var(--surface);font-size:12px;font-weight:650;color:var(--muted);border-bottom:1px solid var(--line)}
+.grp span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seg{display:flex;gap:4px;margin:0 12px 10px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:9px}
 .seg button{flex:1;border:0;background:none;border-radius:6px;padding:5px 6px;cursor:pointer;font-size:13px;color:var(--muted);white-space:nowrap}
 .seg button b{font-weight:650;color:var(--ink);margin-left:3px}
@@ -98,7 +128,12 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;paddi
   <div class="brand">
     <h1>Kho session Claude</h1>
     <div id="acct">Đang kiểm tra tài khoản…</div>
+    <div id="usage" hidden></div>
   </div>
+  <details class="more acctmenu" id="acctMenu">
+    <summary title="Đổi tài khoản Claude Desktop không cần đăng nhập lại">Tài khoản ▾</summary>
+    <div class="menu" id="acctList"><div class="warnline">Đang tải…</div></div>
+  </details>
   <button class="btn primary" id="syncAll" title="Áp dụng cho TẤT CẢ session đã có trong Claude Desktop, không riêng session đang chọn">Thêm tất cả session vào mọi tài khoản</button>
   <details class="more" id="more">
     <summary aria-label="Thêm tùy chọn" title="Thêm tùy chọn">⋯</summary>
@@ -113,6 +148,10 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;paddi
     <div class="filters">
       <input id="q" type="search" placeholder="Tìm session hoặc project…" autocomplete="off" autofocus>
       <select id="acctf" aria-label="Lọc theo tài khoản" autocomplete="off"></select>
+      <select id="sortf" aria-label="Cách xếp danh sách" autocomplete="off">
+        <option value="recent">Xếp: gần nhất</option>
+        <option value="project">Xếp: theo project</option>
+      </select>
     </div>
     <div class="seg" id="seg" role="group" aria-label="Loại session trong tài khoản" hidden>
       <button data-v="all" title="Mọi session tài khoản này đang thấy"></button>
@@ -154,7 +193,7 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;paddi
 <script>
 var TOKEN = '__TOKEN__';
 var NOT_IN_APP = '__none__';
-var all = [], view = [], selId = null, timer = null, busy = false, me = null, accts = [], mode = 'all';
+var all = [], view = [], selId = null, timer = null, busy = false, me = null, accts = [], mode = 'all', usage = {};
 function $(s){ return document.querySelector(s); }
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 function ago(ms){
@@ -196,6 +235,8 @@ function load(){
       : 'Nhận ra theo session bạn bấm gần nhất trong Claude Desktop. Vừa đổi tài khoản thì bấm một session bên đó trước. Đặt tên tài khoản trong file .claude\\cs-accounts.txt';
     me = d.me;
     accts = d.accts || [];
+    usage = d.usage || {};
+    renderUsage(usage);
     // Số session MỖI tài khoản đang có (tự tạo + được thêm vào); tài khoản đang đăng nhập lên đầu
     var sel = $('#acctf'), cur = sel.value, has = {}, none = 0;
     all.forEach(function(s){
@@ -212,6 +253,92 @@ function load(){
     if (!all.length) $('#chat').innerHTML = '<div class="empty"><strong>Chưa có session nào</strong>Không thấy file session trong ' + esc(d.root) + '.</div>';
     else if (selId) select(selId, false, true);
   }).catch(function(e){ toast(e.message); });
+}
+
+// Giới hạn sử dụng: số Claude Desktop tự ghi ~15 phút/lần, CHỈ cho tài khoản đang đăng nhập. Quá
+// 5 giờ / 7 ngày kể từ lần ghi thì khung giới hạn đó chắc chắn đã qua => "đã hồi".
+function usageBars(x){
+  var bar = function(label, pct, windowMs){
+    if (Date.now() - x.t > windowMs) return '<span class="ubar">' + label + ' <em>đã hồi</em></span>';
+    pct = Math.max(0, Math.min(100, +pct || 0));
+    var cls = pct >= 95 ? ' full' : pct >= 80 ? ' hi' : '';
+    return '<span class="ubar' + cls + '">' + label + ' <i><s style="width:' + pct + '%"></s></i><em>' + pct + '%</em></span>';
+  };
+  return bar('5 giờ', x.fh, 5 * 3600000) + bar('7 ngày', x.sd, 7 * 86400000);
+}
+function whenText(t){
+  var at = new Date(t), hm = at.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  return new Date().toDateString() === at.toDateString() ? 'lúc ' + hm : 'lúc ' + hm + ' ' + at.getDate() + '/' + (at.getMonth() + 1);
+}
+// Đầu trang: chỉ tài khoản đang dùng (tài khoản khác xem trong menu Tài khoản)
+function renderUsage(u){
+  var x = me && u[me], el = $('#usage');
+  el.hidden = !x;
+  if (!x) return;
+  el.innerHTML = usageBars(x) + '<span class="when" title="Claude Desktop tự ghi số này khoảng 15 phút một lần, nên bấm làm mới chỉ thấy số mới khi app đã ghi.">số ' + whenText(x.t) + '</span>' +
+    '<button id="refresh" title="Tải lại số liệu">↻</button>';
+}
+
+// ---- đổi tài khoản: tool cất đăng nhập hiện tại rồi đặt đăng nhập đã lưu của tài khoản chọn ----
+function loadAccts(){
+  return api('/api/accounts').then(function(d){
+    var box = $('#acctList');
+    if (!d.desk){ box.innerHTML = '<div class="warnline">Chưa thấy dữ liệu Claude Desktop trên máy này.</div>'; return; }
+    box.innerHTML = d.accounts.map(function(a){
+      var x = usage[a.label];
+      var info = x ? 'số ' + whenText(x.t) + (x.guess ? ' (ước đoán)' : x.live ? ' (trực tiếp)' : '') : 'chưa có số giới hạn';
+      // vào tài khoản này sau lần app ghi số mà app chưa ghi thêm (vd chỉ vào vài chục giây)
+      if (a.lastSeen && (!x || x.t < a.lastSeen - 60000)) info += ' · app chưa ghi số lần vào ' + whenText(a.lastSeen).replace('lúc ', '');
+      if (x && x.tokenExpired) info += ' · token hết hạn (401), lấy lại token mới';
+      if (x && x.liveError) info += ' · gọi API trực tiếp lỗi' + (x.liveErrCode ? ' (mã ' + x.liveErrCode + ')' : ' (không kết nối được)') + ', token có thể hết hạn — lấy lại token';
+      if (x && x.liveUnmapped) info += ' · chưa đọc được số từ API trực tiếp (xem file cs-usage-debug-*.json)';
+      if (!a.current) info += ' · ' + (a.saved ? 'đã lưu đăng nhập' : 'chưa lưu đăng nhập');
+      var right = a.current ? '<span class="tag">đang dùng</span>'
+        : a.saved ? '<button class="btn" data-acct="' + esc(a.id) + '" data-name="' + esc(a.label) + '">Vào</button>' : '';
+      return '<div class="arow"><div class="an"><b>' + esc(a.label) +
+        '<button class="rn" data-rename="' + esc(a.id) + '" data-name="' + esc(a.label) + '" title="Đặt tên cho tài khoản này">đổi tên</button></b>' +
+        (x ? '<div class="bars">' + usageBars(x) + '</div>' : '') + '<small>' + esc(info) + '</small></div>' + right + '</div>';
+    }).join('') +
+      '<div class="foot"><button id="newLogin">Đăng nhập tài khoản khác…<small>Tool cất đăng nhập hiện tại rồi đưa Claude Desktop về màn đăng nhập. Mỗi tài khoản chỉ đăng nhập một lần, lần sau chọn ở đây là vào.</small></button></div>' +
+      '<div class="warnline">Đừng bấm Đăng xuất trong Claude Desktop — làm vậy là huỷ đăng nhập đã lưu, phải đăng nhập lại.</div>' +
+      '<div class="warnline">Muốn số usage của tài khoản KHÔNG đang dùng luôn mới mỗi lần Đồng bộ: tự lấy OAuth token (bằng công cụ của bạn) rồi dán vào file <code>cs-profiles\\&lt;mã tài khoản&gt;\\oauth-token.txt</code> — tool chỉ đọc file này, không tự lấy/giải mã token từ app.</div>';
+  }).catch(function(e){ $('#acctList').innerHTML = '<div class="warnline">' + esc(e.message) + '</div>'; });
+}
+function switchTo(acct, name){
+  $('#acctMenu').open = false;
+  if (busy) return;
+  var q = acct ? 'Chuyển Claude Desktop sang ' + name + '?' : 'Đưa Claude Desktop về màn đăng nhập để đăng nhập tài khoản khác?';
+  if (!confirm(q + '\n\nApp sẽ tắt rồi mở lại (khoảng 10 giây). Các luồng Claude đang chạy trong app sẽ dừng. Đăng nhập hiện tại được cất lại, chọn lại lúc nào cũng được.')) return;
+  toast(acct ? 'Đang chuyển sang ' + name + '…' : 'Đang đưa về màn đăng nhập…', 20000);
+  run(api('/api/switch', { method: 'POST', body: JSON.stringify({ acct: acct || '' }) })).then(loadAccts);
+}
+$('#usage').addEventListener('click', function(e){
+  if (e.target.id !== 'refresh' || busy) return;
+  e.target.classList.add('spin');
+  load().then(function(){ var r = $('#refresh'); if (r) r.classList.remove('spin'); });
+});
+$('#acctMenu').addEventListener('toggle', function(){ if ($('#acctMenu').open) loadAccts(); });
+$('#acctList').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.rename){
+    var n = prompt('Tên cho tài khoản ' + b.dataset.name + ' (vd email):', b.dataset.name);
+    if (n && n.trim() && n.trim() !== b.dataset.name)
+      api('/api/account-name', { method: 'POST', body: JSON.stringify({ acct: b.dataset.rename, name: n.trim() }) })
+        .then(function(r){ toast(r.message); return load(); }).then(loadAccts).catch(function(e){ toast(e.message, 6000); });
+    return;
+  }
+  if (b.id === 'newLogin') switchTo(null);
+  else if (b.dataset.acct) switchTo(b.dataset.acct, b.dataset.name);
+});
+
+// Nhóm project: session không gắn project (thư mục scratch-… riêng của mỗi session) gom một nhóm;
+// session chạy trong worktree (.claude\worktrees\… hoặc .claude-worktrees-…) tính vào project gốc.
+var NO_PROJECT = 'Không gắn project';
+function groupOf(s){
+  var c = (s.cwd || '').replace(/\//g, '\\');
+  if (/\\scratch-workspaces\\/i.test(c)) return NO_PROJECT;
+  var m = c.match(/([^\\]+)\\\.claude(?:\\worktrees|-worktrees)/i);
+  return m ? m[1] : (s.project || NO_PROJECT);
 }
 
 function apply(){
@@ -240,15 +367,27 @@ function apply(){
     }
     return !q || (s.title + ' ' + s.cwd).toLowerCase().indexOf(q) >= 0;
   });
-  $('#count').textContent = view.length + ' session';
+  // Theo project: nhóm nào có session mới nhất lên đầu, trong nhóm vẫn xếp mới nhất trước
+  var byProject = $('#sortf').value === 'project', cnt = {}, top = {};
+  if (byProject){
+    view.forEach(function(s){ var p = groupOf(s); cnt[p] = (cnt[p] || 0) + 1; top[p] = Math.max(top[p] || 0, s.mtime); });
+    view.sort(function(x, y){ var a = groupOf(x), b = groupOf(y); return a === b ? y.mtime - x.mtime : top[b] - top[a] || a.localeCompare(b); });
+  }
+  $('#count').textContent = view.length + ' session' + (byProject ? ' · ' + Object.keys(cnt).length + ' project' : '');
+  var lastP = null;
   $('#list').innerHTML = view.map(function(s){
+    var head = '';
+    if (byProject && groupOf(s) !== lastP){
+      lastP = groupOf(s);
+      head = '<div class="grp"><span>' + esc(lastP) + '</span><span>' + cnt[lastP] + '</span></div>';
+    }
     var meta = [];
     if (s.origin) meta.push('<span class="badge">' + esc(s.origin) + '</span>');
     else meta.push('<span class="badge new">chưa có trong app</span>');
     meta.push('<span>' + esc(s.project) + '</span>');
     meta.push('<span>' + ago(s.mtime) + '</span>');
     if (s.mb > 5) meta.push('<span class="w">nặng ' + s.mb + ' MB</span>');
-    return '<button class="item' + (s.id === selId ? ' on' : '') + (s.exists ? '' : ' gone') + '" role="option" data-id="' + s.id + '">' +
+    return head + '<button class="item' + (s.id === selId ? ' on' : '') + (s.exists ? '' : ' gone') + '" role="option" data-id="' + s.id + '">' +
       '<span class="t">' + esc(s.title) + '</span><span class="m">' + meta.join('') + '</span></button>';
   }).join('');
 }
@@ -368,12 +507,18 @@ $('#restart').addEventListener('click', function(){
   toast('Đang khởi động lại Claude Desktop…', 15000);
   run(api('/api/restart', { method: 'POST' }));
 });
-document.addEventListener('click', function(e){ if (!e.target.closest('#more')) $('#more').open = false; });
+document.addEventListener('click', function(e){
+  if (!e.target.closest('#more')) $('#more').open = false;
+  if (!e.target.closest('#acctMenu')) $('#acctMenu').open = false;
+});
 $('#q').addEventListener('input', apply);
 $('#acctf').addEventListener('change', apply);
+// Nhớ cách xếp cho lần mở sau (chỉ trên trình duyệt này)
+try { var savedSort = localStorage.getItem('cs-sort'); if (savedSort) $('#sortf').value = savedSort; } catch (e) {}
+$('#sortf').addEventListener('change', function(){ try { localStorage.setItem('cs-sort', $('#sortf').value); } catch (e) {} apply(); });
 $('#seg').addEventListener('click', function(e){ var b = e.target.closest('button'); if (b){ mode = b.dataset.v; apply(); } });
 document.addEventListener('keydown', function(e){
-  if (e.key === 'Escape'){ $('#more').open = false; return; }
+  if (e.key === 'Escape'){ $('#more').open = false; $('#acctMenu').open = false; return; }
   if (e.key === '/' && e.target.tagName !== 'INPUT'){ e.preventDefault(); $('#q').focus(); return; }
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
   if (e.target.tagName === 'SELECT' || e.target.closest('.menu, .acts')) return;
@@ -385,6 +530,8 @@ document.addEventListener('keydown', function(e){
   select(view[i].id, true);
 });
 window.addEventListener('focus', function(){ if (!busy) load(); });
+// Giới hạn của tài khoản đang dùng được app ghi ~15 phút/lần: tự tải lại mỗi phút khi tab đang mở
+setInterval(function(){ if (!busy && !document.hidden) load(); }, 60000);
 load();
 </script>
 </body>

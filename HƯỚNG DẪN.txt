@@ -68,6 +68,24 @@ DÙNG HẰNG NGÀY (chỉ 2 việc)
     khoản đang đăng nhập — đặt tên trong app như bình thường.
   - Session bị gạch ngang là đã mất thư mục project, không mở được.
 
+GIỚI HẠN SỬ DỤNG VÀ ĐỔI TÀI KHOẢN
+  - Dưới tên tài khoản có hàng giới hạn (5 giờ / 7 ngày) của từng
+    tài khoản. Số do Claude Desktop tự ghi khi tài khoản đó đang
+    đăng nhập; tài khoản khác hiện số lần cuối kèm giờ. "đã hồi" =
+    khung giới hạn đó chắc chắn đã làm mới.
+  - Nút "Tài khoản ▾": chọn "Vào" để chuyển Claude Desktop sang tài
+    khoản đó, KHÔNG phải đăng nhập lại (app tắt rồi mở lại ~10 giây,
+    luồng Claude đang chạy trong app sẽ dừng).
+  - Tài khoản mới: bấm "Đăng nhập tài khoản khác…" -> app về màn
+    đăng nhập -> đăng nhập như thường (chỉ lần đầu). Từ đó trở đi
+    chọn trong tool là vào.
+  - Tool giữ đăng nhập của từng tài khoản (đã được app mã hoá, chỉ
+    dùng được trên máy + tài khoản Windows này) ở:
+      C:\Users\<tên bạn>\.claude\cs-profiles
+    KHÔNG gửi thư mục này cho ai.
+  - ĐỪNG bấm Đăng xuất trong Claude Desktop: làm vậy là huỷ đăng
+    nhập đã lưu, lần sau phải đăng nhập lại tài khoản đó.
+
 TÊN TÀI KHOẢN
   Tool tự học tên: mỗi lần bạn đăng nhập một tài khoản rồi mở tool,
   nó ghi tên tài khoản đó lại. Đăng nhập lần lượt từng tài khoản,

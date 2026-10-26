@@ -50,7 +50,7 @@ function Test-PathRaw([string]$p) { return [bool]($p -and ([IO.Directory]::Exist
 #   tìm thấy dữ liệu của Claude Desktop" (người dùng báo 20/10/2026).
 # - %LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude: bản Store chưa chuyển.
 # - %APPDATA%\Claude: bản cài bằng file .exe. - %LOCALAPPDATA%\Claude-3p: chế độ nhà cung cấp 3P.
-# - CLAUDE_USER_DATA_DIR: app dùng thư mục này nếu biến được đặt.
+# - CLAUDE_USER_DATA_DIR: chỉ bản dev dùng (bản phát hành bỏ qua biến này) — giữ cho đủ.
 $script:DataDirsCache = $null
 function Desktop-DataDirs {
   $now = Now-Ms
@@ -453,10 +453,63 @@ function Learn-CurrentName {
   } catch {}
 }
 
+# Đặt tên từ giao diện (app không lưu email ở chỗ tool đọc được, nên tài khoản chưa từng đăng nhập
+# Claude Code CLI chỉ có mã — người dùng tự đặt tên)
+function Set-AccountName([string]$acct, [string]$name) {
+  $key = $acct.Substring(0, 8).ToLower()
+  $old = @(); if ([IO.File]::Exists($AccountsFile)) { $old = @([IO.File]::ReadAllText($AccountsFile, $Utf8).TrimEnd("`r", "`n").Split("`n")) }
+  $lines = New-Object System.Collections.Generic.List[string]; $found = $false
+  foreach ($l in $old) { if ($l -match ('^\s*' + $key + '\s*=')) { if (-not $found) { $lines.Add($key + ' = ' + $name) }; $found = $true } else { $lines.Add($l) } }
+  if (-not $found) { $lines.Add($key + ' = ' + $name) }
+  [void][IO.Directory]::CreateDirectory((Split-Path $AccountsFile))
+  [IO.File]::WriteAllText($AccountsFile, (($lines -join "`n") -replace "`n+$", '') + "`n", $Utf8)
+}
+
+# Tên tự học từ Claude Desktop: trang claude.ai trong app cache thông tin tài khoản (…"uuid"…<mã>…
+# "email_address"…<email>) trong IndexedDB. IndexedDB đi theo hồ sơ đăng nhập (cs-profiles) nên mỗi
+# hồ sơ có email của đúng tài khoản đó. Chỉ điền tên còn trống / còn là mã — không đè tên người dùng đặt.
+$script:NameScanDone = @{}
+function Find-EmailIn([string]$dir, [string]$acct) {
+  $idb = Join-Path $dir 'IndexedDB'
+  if (-not [IO.Directory]::Exists($idb)) { return $null }
+  $Ord = [StringComparison]::Ordinal
+  foreach ($f in [IO.Directory]::GetFiles($idb, '*', [IO.SearchOption]::AllDirectories)) {
+    $fi = New-Object IO.FileInfo($f)
+    if ($fi.Length -lt 64 -or $fi.Length -gt 20MB) { continue }
+    $k = $f + '|' + $fi.LastWriteTimeUtc.Ticks + '|' + $acct
+    if ($script:NameScanDone.ContainsKey($k)) { continue } # file chưa đổi: đã tìm rồi, không thấy
+    $script:NameScanDone[$k] = $true
+    try { $t = Read-Slice $f 0 $fi.Length } catch { continue }
+    $i = $t.IndexOf($acct, $Ord)
+    while ($i -ge 0) {
+      $j = $t.IndexOf('email_address', $i, $Ord)
+      if ($j -ge 0 -and $j - $i -lt 120) {
+        $m = [regex]::Match($t.Substring($j, [Math]::Min(200, $t.Length - $j)), '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
+        if ($m.Success) { return $m.Value }
+      }
+      $i = $t.IndexOf($acct, $i + 1, $Ord)
+    }
+  }
+  return $null
+}
+function Learn-DesktopNames([string]$dataDir, $ids) {
+  try {
+    $names = Read-AccountNames
+    $cur = Desktop-Account $dataDir
+    foreach ($a in $ids) {
+      $k = $a.Substring(0, 8).ToLower()
+      if ($names[$k] -and $names[$k] -ne $k) { continue }
+      $dirs = @(); if ($a -eq $cur) { $dirs += $dataDir }; $dirs += (Join-Path $ProfileDir $a)
+      foreach ($dir in $dirs) { $e = Find-EmailIn $dir $a; if ($e) { Set-AccountName $a $e.Split('@')[0]; break } }
+    }
+  } catch {}
+}
+
 function Account-Labels([string]$root) {
   $ids = @([IO.Directory]::GetDirectories($root) | ForEach-Object { Leaf $_ })
   Ensure-AccountsFile $ids
   Learn-CurrentName
+  Learn-DesktopNames (Split-Path $root) $ids
   $names = Read-AccountNames
   $labels = @{}
   foreach ($a in $ids) { $k = $a.Substring(0, [Math]::Min(8, $a.Length)).ToLower(); $labels[$a] = $(if ($names[$k]) { $names[$k] } else { $a.Substring(0, [Math]::Min(8, $a.Length)) }) }
@@ -495,7 +548,7 @@ function Scan-Cards([string]$root) {
       }
     }
   }
-  return @{ targets = $targets; cards = $cards; deleted = $deleted }
+  return @{ targets = $targets; cards = $cards; deleted = $deleted; acctNow = (Desktop-Account (Split-Path $root)) }
 }
 
 function Newest-Copy($copies) {
@@ -592,23 +645,212 @@ function Owner-Info($st) {
   return $info
 }
 
-# Thư mục <tài khoản>\<org> Claude Desktop đang dùng, đoán từ ~/.claude.json
 # Thư mục <tài khoản>\<org> Claude Desktop đang dùng. KHÔNG lấy từ ~/.claude.json: file đó của
 # Claude Code CLI, app không cập nhật khi đổi tài khoản (đã dính: app đã sang tài khoản khác mà file vẫn ghi tài khoản cũ).
-# Dấu hiệu chắc: app ghi lại thẻ mỗi khi bạn bấm/dùng một session, và khi lưu nó BỎ trường lạ
-# originAcct; còn thẻ do tool chép thì luôn có originAcct. => thẻ KHÔNG có originAcct được ghi gần
-# nhất nằm ở thư mục app đang dùng. (Vừa đổi tài khoản mà chưa bấm session nào thì còn đoán cũ.)
+# - Tài khoản: lastKnownAccountUuid trong config.json của app ($st.acctNow) — chắc chắn.
+# - Org: app ghi lại thẻ mỗi khi bạn bấm/dùng một session, và khi lưu nó BỎ trường lạ originAcct;
+#   thẻ do tool chép thì luôn có originAcct => thẻ KHÔNG có originAcct được ghi gần nhất (trong tài
+#   khoản đó) nằm ở org app đang dùng. Không đọc được config thì đoán như vậy trên mọi tài khoản.
 function Active-Target($st) {
   $best = $null
   foreach ($copies in $st.cards.Values) {
     foreach ($c in $copies) {
       if (Get-Key $c.data 'originAcct') { continue }
+      if ($st.acctNow -and $c.acct -ne $st.acctNow) { continue }
       if (-not $best -or $c.mtime -gt $best.mtime) { $best = $c }
     }
   }
-  if (-not $best) { return $null }
-  foreach ($t in $st.targets) { if ($t.dir -eq $best.dir) { return $t } }
+  if ($best) { foreach ($t in $st.targets) { if ($t.dir -eq $best.dir) { return $t } } }
+  # chưa có thẻ app tự ghi trong tài khoản này: chỉ chắc khi tài khoản có đúng 1 org
+  $mine = @($st.targets | Where-Object { $_.acct -eq $st.acctNow })
+  if ($st.acctNow -and $mine.Count -eq 1) { return $mine[0] }
   return $null
+}
+
+# ---- giới hạn sử dụng của từng tài khoản ----
+# App tự ghi ~15 phút/lần vào <thư mục dữ liệu>\plan-usage-history.json, theo ORG:
+# {"t":<ms>,"org":"<org>","u":{"fh":<% giới hạn 5 giờ>,"sd":<% giới hạn 7 ngày>}}. Chỉ có số khi
+# tài khoản đó đang đăng nhập => tài khoản khác hiện số lần cuối kèm giờ. Org dùng chung cho nhiều
+# tài khoản: gán theo nhật ký tài khoản đang dùng của tool, chưa có thì đoán theo thẻ app tự ghi.
+$AccountLog = Join-Path $UserHome '.claude\cs-account-log.json'
+function Read-AccountLog {
+  try { if ([IO.File]::Exists($AccountLog)) { $o = Parse-Json (Read-AllText $AccountLog); if ($o -is [object[]]) { return ,$o } } } catch {}
+  return ,@()
+}
+function Note-Account([string]$acct) {
+  if (-not $acct) { return }
+  $log = New-Object System.Collections.Generic.List[object]
+  foreach ($e in (Read-AccountLog)) { $log.Add($e) }
+  if ($log.Count -and (Get-Key $log[$log.Count - 1] 'acct') -eq $acct) { return }
+  $log.Add([ordered]@{ t = (Now-Ms); acct = $acct })
+  while ($log.Count -gt 500) { $log.RemoveAt(0) }
+  try { [void][IO.Directory]::CreateDirectory((Split-Path $AccountLog)); Write-Atomic $AccountLog (To-JsonText $log) } catch {}
+}
+# nhãn tài khoản -> @{ t; fh; sd; guess }
+function Usage-ByAccount([string]$root, $st) {
+  $res = @{}
+  $f = Join-Path (Split-Path $root) 'plan-usage-history.json'
+  if (-not [IO.File]::Exists($f)) { return $res }
+  $samples = Get-Key (Parse-Json (Read-AllText $f)) 'samples'
+  if (-not $samples) { return $res }
+  $orgAccts = @{}; $acts = @{}; $label = @{} # org -> [tài khoản]; "tài khoản|org" -> [lastActivityAt thẻ app tự ghi]
+  foreach ($t in $st.targets) {
+    $o = Leaf $t.dir; $label[$t.acct] = $t.label
+    if (-not $orgAccts.ContainsKey($o)) { $orgAccts[$o] = New-Object System.Collections.Generic.List[string] }
+    if (-not $orgAccts[$o].Contains($t.acct)) { $orgAccts[$o].Add($t.acct) }
+  }
+  foreach ($copies in $st.cards.Values) {
+    foreach ($c in $copies) {
+      if (Get-Key $c.data 'originAcct') { continue }
+      $k = $c.acct + '|' + (Leaf $c.dir)
+      if (-not $acts.ContainsKey($k)) { $acts[$k] = New-Object System.Collections.Generic.List[double] }
+      $acts[$k].Add($c.stamp)
+    }
+  }
+  $log = Read-AccountLog
+  $done = @{}
+  $oldest = (Now-Ms) - 30L * 86400000
+  for ($i = $samples.Count - 1; $i -ge 0; $i--) {
+    $s = $samples[$i]; $t = To-Num (Get-Key $s 't'); $org = [string](Get-Key $s 'org')
+    if ($t -lt $oldest) { break }
+    $cands = $orgAccts[$org]
+    if (-not $cands) { continue }
+    $acct = $null; $guess = $false
+    if ($cands.Count -eq 1) { $acct = $cands[0] }
+    else {
+      # Mục nhật ký ngay trước lúc ghi số; không khớp org thì xét mục đầu tiên trong 2 phút SAU đó
+      # (app ghi số ngay khi vừa đăng nhập, trước lúc tool kịp ghi nhật ký — thấy lệch ~10 giây)
+      $before = $null; $after = $null
+      foreach ($e in $log) {
+        $et = To-Num (Get-Key $e 't')
+        if ($et -le $t) { $before = $e } elseif (-not $after -and $et -le $t + 120000) { $after = $e }
+      }
+      foreach ($e in @($before, $after)) {
+        if ($e -and $cands.Contains([string](Get-Key $e 'acct'))) { $acct = [string](Get-Key $e 'acct'); break }
+      }
+      if (-not $acct) {
+        # tài khoản có hoạt động gần nhất (không quá 15 phút sau) thời điểm ghi số
+        $bestT = 0
+        foreach ($a in $cands) { foreach ($x in @($acts[$a + '|' + $org])) { if ($x -and $x -le $t + 900000 -and $x -gt $bestT) { $bestT = $x; $acct = $a } } }
+        $guess = $true
+      }
+    }
+    if ($acct -and -not $done.ContainsKey($acct)) {
+      $done[$acct] = $true
+      $u = Get-Key $s 'u'
+      $res[$label[$acct]] = [ordered]@{ t = $t; fh = (Get-Key $u 'fh'); sd = (Get-Key $u 'sd'); guess = $guess }
+    }
+  }
+  return $res
+}
+
+# ---- usage TRỰC TIẾP qua OAuth token (xem mục OAuth token ngay dưới) ----
+# Số app tự ghi (Usage-ByAccount ở trên) chỉ mới khi app ghi mẫu (~15 phút/lần, CHỈ tài khoản đang
+# đăng nhập) -> tài khoản khác luôn thấy số CŨ. Đây là mục đích chính người dùng cần: bấm đồng bộ là
+# có số MỚI cho mọi tài khoản, không cần đổi tài khoản/tắt app.
+# (24/10/2026: đã bỏ biến thể cookie `sessionKey` — người dùng báo không còn đúng nữa. Chỉ còn OAuth
+# token. Hàm chung Find-Pct/Extract-Usage/Dump-UsageDebug giữ lại, OAuth token dùng tiếp ở dưới.)
+# Dò đệ quy 1 số % trong JSON theo GỢI Ý tên khoá (chữ thường, không dấu cách) — chưa có mẫu JSON
+# thật từ endpoint OAuth nên không hardcode đường dẫn cố định.
+function Find-Pct($node, [string[]]$hints) {
+  if ($node -is [System.Collections.IDictionary]) {
+    foreach ($k in @($node.Keys)) {
+      $kl = ([string]$k).ToLowerInvariant()
+      foreach ($h in $hints) {
+        if (-not $kl.Contains($h)) { continue }
+        $v = $node[$k]
+        if ($v -is [System.Collections.IDictionary]) {
+          foreach ($sub in @('utilization', 'percent_used', 'percentage', 'percent', 'used_percent', 'pct')) {
+            if ($v.ContainsKey($sub)) { return (To-Num $v[$sub]) }
+          }
+        } elseif ($v -ne $null -and -not ($v -is [System.Collections.IDictionary]) -and -not ($v -is [System.Collections.IEnumerable] -and -not ($v -is [string]))) {
+          return (To-Num $v)
+        }
+      }
+    }
+    foreach ($k in @($node.Keys)) { $r = Find-Pct $node[$k] $hints; if ($null -ne $r) { return $r } }
+  } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) {
+    foreach ($it in $node) { $r = Find-Pct $it $hints; if ($null -ne $r) { return $r } }
+  }
+  return $null
+}
+function Extract-Usage($raw) {
+  if (-not $raw) { return $null }
+  $fh = Find-Pct $raw @('five_hour', 'fivehour', 'fiveh', '5h')
+  $sd = Find-Pct $raw @('seven_day', 'sevenday', 'sevend', '7d')
+  if ($null -eq $fh -or $null -eq $sd) { return $null }
+  return [ordered]@{ fh = [math]::Round($fh); sd = [math]::Round($sd) }
+}
+function Dump-UsageDebug([string]$acct, $raw) {
+  try { Write-Atomic (Join-Path $UserHome ('.claude\cs-usage-debug-' + $acct + '.json')) $Js.Serialize($raw) } catch {}
+}
+
+# ---- usage TRỰC TIẾP qua OAuth token người dùng tự dán (23/10/2026, thay cho cookie từ 24/10/2026) ----
+# Mục đích: số MỚI cho tài khoản KHÔNG đang dùng mà không cần đổi tài khoản/tắt app. Gọi endpoint
+# OAuth: GET https://api.anthropic.com/api/oauth/usage kèm header Authorization: Bearer <token>.
+# RANH GIỚI (giống ràng buộc 5 trong CLAUDE.md): tool KHÔNG tự đọc/giải mã token từ auth.json hay
+# bất kỳ kho lưu trữ nào của app (config.json, Local State, Network\Cookies, IndexedDB…) — việc đó
+# đã thử và bị bộ kiểm duyệt an toàn chặn, không làm lại. NGƯỜI DÙNG tự lấy giá trị token bằng công
+# cụ của họ (vd script ngoài) rồi tự dán vào cs-profiles\<mã tài khoản>\oauth-token.txt — tool CHỈ
+# đọc file text này.
+# CHƯA XÁC NHẬN tên trường chính xác trong JSON trả về (chưa có mẫu thật) — Find-Pct dò theo từ
+# khoá (không hardcode đường dẫn cố định); dò không ra thì KHÔNG đoán bừa — Dump-UsageDebug ghi
+# nguyên văn JSON ra cs-usage-debug-<acct>.json (chỉ ở máy người dùng) để xem và chỉnh cho khớp.
+function Token-Path([string]$acct) { return (Join-Path (Profile-Path $acct) 'oauth-token.txt') }
+function Read-Token([string]$acct) {
+  try {
+    $f = Token-Path $acct
+    if ([IO.File]::Exists($f)) { $v = (Read-AllText $f).Trim(); if ($v) { return $v } }
+  } catch {}
+  return $null
+}
+function Token-Accounts {
+  if (-not [IO.Directory]::Exists($ProfileDir)) { return ,@() }
+  return ,@([IO.Directory]::GetDirectories($ProfileDir) | ForEach-Object { Leaf $_ } |
+    Where-Object { $_ -match $UuidRe -and [IO.File]::Exists((Token-Path $_)) })
+}
+# CHỈ ĐỌC (GET), không refresh/ghi gì phía app hay tài khoản. $null nếu không có gì để gọi;
+# @{ok=$false; authError=$true} nếu token hết hạn/sai (401/403).
+function Fetch-Usage-OAuth([string]$token) {
+  if (-not $token) { return $null }
+  try {
+    $resp = Invoke-WebRequest -Uri 'https://api.anthropic.com/api/oauth/usage' `
+      -Headers @{ Authorization = 'Bearer ' + $token; Accept = '*/*' } -UseBasicParsing -TimeoutSec 10
+    return [ordered]@{ ok = $true; raw = (Parse-Json $resp.Content) }
+  } catch {
+    $code = 0
+    try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+    return [ordered]@{ ok = $false; authError = ($code -eq 401 -or $code -eq 403); code = $code }
+  }
+}
+# Gọi cho mọi tài khoản có oauth-token.txt, ghi đè vào $usage (cùng khoá theo nhãn, cùng hình dạng
+# {t,fh,sd,guess,live} nên UI hiện sẵn không cần sửa). Lỗi xác thực thì giữ số cũ + đánh dấu tokenExpired.
+function Overlay-LiveUsage-OAuth($usage, $st) {
+  foreach ($acct in (Token-Accounts)) {
+    $label = $(($st.targets | Where-Object { $_.acct -eq $acct } | Select-Object -First 1).label)
+    if (-not $label) { continue }
+    $token = Read-Token $acct
+    if (-not $token) { continue }
+    # Có file token cho tài khoản này => nếu $usage chưa có khoá (app chưa ghi số) vẫn tạo khung
+    # rỗng để còn gắn cờ lỗi, nếu không UI không biết là đã thử live mà hỏng.
+    if (-not $usage.Contains($label)) { $usage[$label] = [ordered]@{ t = (Now-Ms); fh = 0; sd = 0; guess = $false } }
+    $r = Fetch-Usage-OAuth $token
+    if (-not $r -or -not $r.ok) {
+      # Lỗi xác thực (401/403) = token hết hạn. Lỗi khác (timeout/mạng/mã lạ, code=0) cũng phải báo,
+      # không im lặng giữ số cũ (trước đây bấm ↻ "không ăn" mà không hiện lý do).
+      if ($r -and $r.authError) { $usage[$label]['tokenExpired'] = $true }
+      else { $usage[$label]['liveError'] = $true; $usage[$label]['liveErrCode'] = $(if ($r) { $r.code } else { 0 }) }
+      continue
+    }
+    $u = Extract-Usage $r.raw
+    if ($u) {
+      $usage[$label] = [ordered]@{ t = (Now-Ms); fh = $u.fh; sd = $u.sd; guess = $false; live = $true }
+    } else {
+      Dump-UsageDebug $acct $r.raw
+      $usage[$label]['tokenExpired'] = $false; $usage[$label]['liveUnmapped'] = $true
+    }
+  }
+  return $usage
 }
 
 # Session cần nhập vào org đang đăng nhập bằng deep link
@@ -642,15 +884,18 @@ function Backup-Cards([string]$root) {
 
 function Apply-Ops($ops) { foreach ($o in $ops) { Write-Atomic $o.dest $o.content } }
 
+# Chỉ xét tiến trình tên "claude" (app Store: Claude.exe, bản .exe: claude.exe; Claude Code CLI cũng
+# tên claude nhưng nằm chỗ khác nên lọc theo đường dẫn). Duyệt MỌI tiến trình để đọc Path mất ~1,5 s
+# mỗi lần (đo 23/10/2026) — làm đổi tài khoản và menu tài khoản chậm hẳn; theo tên chỉ ~5 ms.
 function Desktop-Procs {
-  return @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*WindowsApps*Claude*' -or $_.Path -like '*AnthropicClaude*' })
+  return @(Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*WindowsApps*Claude*' -or $_.Path -like '*AnthropicClaude*' })
 }
 function Desktop-Exe { $p = Desktop-Procs; if ($p.Count) { return $p[0].Path }; return $null }
 function Quit-Desktop { Desktop-Procs | Stop-Process -Force -ErrorAction SilentlyContinue }
 function Wait-Closed {
-  for ($i = 0; $i -lt 30; $i++) {
-    if (-not (Desktop-Exe)) { Start-Sleep -Milliseconds 800; return $true }
-    Start-Sleep -Milliseconds 500
+  for ($i = 0; $i -lt 100; $i++) {
+    if (-not (Desktop-Exe)) { Start-Sleep -Milliseconds 300; return $true } # chờ Windows nhả hẳn file app vừa mở
+    Start-Sleep -Milliseconds 150
   }
   return $false
 }
@@ -729,6 +974,151 @@ function Remove-Cards($st, $victims, [bool]$restart) {
   return @{ n = $n; note = $(if ($ok) { 'Đã khởi động lại Claude Desktop — tài khoản đang đăng nhập không còn hiện các session này.' } else { 'Đã tắt Claude Desktop nhưng không mở lại được, hãy tự mở app.' }) }
 }
 
+# ================= đổi tài khoản Claude Desktop: bấm là vào, không đăng nhập lại =================
+# Người dùng đồng ý (23/10/2026) cho tool giữ đăng nhập của từng tài khoản trên máy này.
+# Đăng nhập của app nằm trong thư mục dữ liệu: token (app đã mã hoá) ở các khoá oauth:* của
+# config.json, cookie claude.ai ở Network\Cookies, cùng vài kho lưu trữ web. Khoá giải mã (Local State)
+# dùng chung cho mọi tài khoản trên máy nên chỉ cần TRÁO các phần này lúc app TẮT. Tool không đọc
+# nội dung token, chỉ chép nguyên file. Session, cài đặt… không đụng tới.
+# Hồ sơ: ~/.claude/cs-profiles\<mã tài khoản>. Đừng bấm Đăng xuất trong app: đăng xuất huỷ token phía
+# máy chủ, hồ sơ đã lưu thành vô dụng — "Đăng xuất" của tool chỉ cất đăng nhập sang một bên.
+$ProfileDir = Join-Path $UserHome '.claude\cs-profiles'
+$AuthPaths = @('Network\Cookies', 'Network\Cookies-journal', 'Local Storage', 'Session Storage', 'IndexedDB')
+# bootSidebarPlaceholder/bootSideSessions: sidebar app vẽ tạm lúc khởi động — đi theo tài khoản
+function Is-AuthKey([string]$k) { return $k.StartsWith('oauth:') -or $k -eq 'lastKnownAccountUuid' -or $k -eq 'bootSidebarPlaceholder' -or $k -eq 'bootSideSessions' }
+
+function Desktop-DataDir { $r = Desktop-Root; if ($r) { return (Split-Path $r) }; return $null }
+function Read-DesktopConfig([string]$dataDir) {
+  $f = Join-Path $dataDir 'config.json'
+  if (-not [IO.File]::Exists($f)) { return $null }
+  $o = Parse-Json (Read-AllText $f)
+  if ($o -is [System.Collections.IDictionary]) { return ,$o }
+  return $null
+}
+# Tài khoản app đang đăng nhập (app ghi lastKnownAccountUuid khi đăng nhập)
+function Desktop-Account([string]$dataDir) {
+  try { $a = [string](Get-Key (Read-DesktopConfig $dataDir) 'lastKnownAccountUuid'); if ($a -match $UuidRe) { return $a } } catch {}
+  return $null
+}
+function Has-Login($cfg) {
+  if (-not $cfg) { return $false }
+  foreach ($k in @($cfg.Keys)) { if ($k.StartsWith('oauth:token') -and $cfg[$k]) { return $true } }
+  return $false
+}
+# Đổi tên/chép file ngay sau khi tắt app có thể bị khoá vài giây (antivirus/Windows quét file vừa
+# ghi) dù Wait-Closed đã chờ 300ms — dính thật 23/10/2026 ("Access ... is denied" lúc Move hồ sơ,
+# tự hết sau vài giây, thử tay lại được ngay). Thử lại thay vì báo lỗi ngay cho người dùng.
+function Retry-FsOp([scriptblock]$op, [int]$tries = 10, [int]$delayMs = 300) {
+  for ($i = 0; $i -lt $tries; $i++) {
+    try { & $op; return } catch { if ($i -eq $tries - 1) { throw }; Start-Sleep -Milliseconds $delayMs }
+  }
+}
+function Remove-Any([string]$p) {
+  $lp = Long-Path $p
+  if ([IO.Directory]::Exists($lp)) { [IO.Directory]::Delete($lp, $true) } elseif ([IO.File]::Exists($lp)) { [IO.File]::Delete($lp) }
+}
+function Copy-Any([string]$src, [string]$dst) {
+  if ([IO.Directory]::Exists((Long-Path $src))) { Copy-Tree $src $dst; return }
+  if ([IO.File]::Exists((Long-Path $src))) { [void][IO.Directory]::CreateDirectory((Split-Path $dst)); [IO.File]::Copy((Long-Path $src), (Long-Path $dst), $true) }
+}
+function Profile-Path([string]$acct) { return (Join-Path $ProfileDir $acct) }
+function Profile-SavedAt([string]$acct) {
+  try { return [long][IO.File]::ReadAllText((Join-Path (Profile-Path $acct) 'saved.txt'), $Utf8).Trim() } catch { return $null }
+}
+function Profile-Ids {
+  if (-not [IO.Directory]::Exists($ProfileDir)) { return ,@() }
+  return ,@([IO.Directory]::GetDirectories($ProfileDir) | ForEach-Object { Leaf $_ } | Where-Object { $_ -match $UuidRe -and [IO.File]::Exists((Join-Path (Profile-Path $_) 'auth.json')) })
+}
+
+# Cất đăng nhập hiện tại của app thành hồ sơ của $acct (app phải đang tắt). Bản trước giữ ở .prev.
+function Save-Profile([string]$dataDir, [string]$acct) {
+  $cfg = Read-DesktopConfig $dataDir
+  if (-not (Has-Login $cfg)) { return $false } # đang ở màn đăng nhập: không có gì để cất, đừng đè hồ sơ tốt
+  $dest = Profile-Path $acct; $tmp = $dest + '.cs-tmp'
+  Retry-FsOp { Remove-Any $tmp }
+  [void][IO.Directory]::CreateDirectory($tmp)
+  foreach ($p in $AuthPaths) { Retry-FsOp { Copy-Any (Join-Path $dataDir $p) (Join-Path $tmp $p) } }
+  $auth = New-Object 'System.Collections.Generic.Dictionary[string,object]'
+  foreach ($k in @($cfg.Keys)) { if (Is-AuthKey $k) { $auth[$k] = $cfg[$k] } }
+  [IO.File]::WriteAllText((Join-Path $tmp 'auth.json'), $Js.Serialize($auth), $Utf8)
+  [IO.File]::WriteAllText((Join-Path $tmp 'saved.txt'), [string](Now-Ms), $Utf8)
+  Retry-FsOp { Remove-Any ($dest + '.prev') }
+  if ([IO.Directory]::Exists($dest)) { Retry-FsOp { [IO.Directory]::Move($dest, $dest + '.prev') } }
+  Retry-FsOp { [IO.Directory]::Move($tmp, $dest) }
+  return $true
+}
+# Thay phần đăng nhập trong thư mục app bằng hồ sơ $src ($src rỗng: bỏ đăng nhập -> app hiện màn
+# đăng nhập, KHÔNG huỷ token phía máy chủ như nút Đăng xuất). Các khoá khác của config.json giữ nguyên.
+function Set-AuthState([string]$dataDir, [string]$src) {
+  $auth = $null
+  if ($src) {
+    $auth = Parse-Json (Read-AllText (Join-Path $src 'auth.json'))
+    if (-not ($auth -is [System.Collections.IDictionary])) { throw 'Hồ sơ đăng nhập bị hỏng — đăng nhập lại tài khoản này một lần.' }
+  }
+  foreach ($p in $AuthPaths) {
+    Retry-FsOp { Remove-Any (Join-Path $dataDir $p) }
+    if ($src) { Retry-FsOp { Copy-Any (Join-Path $src $p) (Join-Path $dataDir $p) } }
+  }
+  $cfg = Read-DesktopConfig $dataDir
+  $out = New-Object 'System.Collections.Generic.Dictionary[string,object]'
+  if ($cfg) { foreach ($k in @($cfg.Keys)) { if (-not (Is-AuthKey $k)) { $out[$k] = $cfg[$k] } } }
+  if ($auth) { foreach ($k in @($auth.Keys)) { $out[$k] = $auth[$k] } }
+  Write-Atomic (Join-Path $dataDir 'config.json') ($Js.Serialize($out))
+}
+
+function Accounts-Info {
+  $dd = Desktop-DataDir
+  if (-not $dd) { return [ordered]@{ desk = $false; accounts = @() } }
+  $root = Join-Path $dd 'claude-code-sessions'
+  $st = Scan-Cards $root
+  $cur = Desktop-Account $dd
+  $loggedIn = Has-Login (Read-DesktopConfig $dd)
+  $labels = Account-Labels $root
+  $names = Read-AccountNames
+  $profiles = Profile-Ids
+  $ids = New-Object System.Collections.Generic.List[string]
+  foreach ($a in @(@($cur) + @($st.targets | ForEach-Object { $_.acct }) + $profiles)) { if ($a -and -not $ids.Contains($a)) { $ids.Add($a) } }
+  # lần gần nhất tài khoản được dùng (theo nhật ký) — để báo "app chưa ghi số cho lần vào này"
+  $lastSeen = @{}
+  foreach ($e in (Read-AccountLog)) { $lastSeen[[string](Get-Key $e 'acct')] = To-Num (Get-Key $e 't') }
+  $list = New-Object System.Collections.Generic.List[object]
+  foreach ($a in $ids) {
+    $k = $a.Substring(0, 8).ToLower()
+    $list.Add([ordered]@{
+      id = $a; label = $(if ($labels[$a]) { $labels[$a] } elseif ($names[$k]) { $names[$k] } else { $k })
+      current = ($loggedIn -and $a -eq $cur); saved = ($profiles -contains $a); savedAt = (Profile-SavedAt $a)
+      lastSeen = $lastSeen[$a]
+    })
+  }
+  return [ordered]@{ desk = $true; loggedIn = $loggedIn; running = [bool](Desktop-Exe); accounts = $list }
+}
+
+# $target = mã tài khoản: vào tài khoản đó; rỗng: bỏ đăng nhập để đăng nhập tài khoản mới.
+# Tắt app -> cất đăng nhập hiện tại vào hồ sơ của nó -> đặt hồ sơ đích vào -> mở lại app.
+# CS_DESKTOP_DIR (chế độ thử trên bản chép): không tắt/mở app thật.
+function Switch-Account([string]$target) {
+  $dd = Desktop-DataDir
+  if (-not $dd) { throw 'Không tìm thấy dữ liệu Claude Desktop.' }
+  $test = [bool]$env:CS_DESKTOP_DIR
+  if ($target -and -not (Profile-Ids).Contains($target)) { throw 'Tài khoản này chưa có đăng nhập đã lưu — đăng nhập nó một lần trước.' }
+  $exe = Desktop-Exe
+  if ($exe -and -not $test) {
+    Quit-Desktop
+    if (-not (Wait-Closed)) { throw 'Không đóng được Claude Desktop. Tắt tay rồi bấm lại.' }
+  }
+  $cur = Desktop-Account $dd
+  $saved = $false
+  try {
+    if ($cur) { $saved = Save-Profile $dd $cur }
+    if ($target) { Set-AuthState $dd (Profile-Path $target); Note-Account $target } else { Set-AuthState $dd $null }
+  } catch {
+    if (-not $test) { [void](Launch-Desktop $exe) }
+    throw ('Chưa đổi được tài khoản: ' + $_.Exception.Message)
+  }
+  $launched = $test -or [bool](Launch-Desktop $exe)
+  return @{ cur = $cur; saved = $saved; launched = $launched }
+}
+
 # ================= server =================
 function Send-Bytes($ctx, [int]$code, [string]$type, [byte[]]$bytes) {
   $r = $ctx.Response
@@ -765,7 +1155,7 @@ function Handle-Request($ctx) {
   if ($req.Headers['X-Token'] -ne $Token) { return Send-Json $ctx 403 @{ error = 'Tải lại trang để tiếp tục.' } }
 
   if ($method -eq 'GET' -and $path -eq '/api/sessions') {
-    $inDesk = $null; $owners = @{}; $me = $null; $accts = @()
+    $inDesk = $null; $owners = @{}; $me = $null; $accts = @(); $usage = @{}
     try {
       $r = Desktop-Root
       if ($r) {
@@ -773,8 +1163,10 @@ function Handle-Request($ctx) {
         $inDesk = Cli-IdsInDesktop $st
         $owners = Owner-Info $st
         $t = Active-Target $st
-        if ($t) { $me = $t.label } # nhãn của tài khoản đang đăng nhập trong Claude Desktop
+        if ($t) { $me = $t.label; Note-Account $t.acct } # nhãn của tài khoản đang đăng nhập trong Claude Desktop
         $accts = @($st.targets | ForEach-Object { $_.label } | Sort-Object -Unique)
+        try { $usage = Usage-ByAccount $r $st } catch {}
+        try { $usage = Overlay-LiveUsage-OAuth $usage $st } catch {}
       }
     } catch {}
     $list = New-Object System.Collections.Generic.List[object]
@@ -789,7 +1181,7 @@ function Handle-Request($ctx) {
         origin = $origin; accounts = $acc
       })
     }
-    return Send-Json $ctx 200 ([ordered]@{ account = $me; me = $me; accts = $accts; root = $Root; desk = [bool]$r; sessions = $list })
+    return Send-Json $ctx 200 ([ordered]@{ account = $me; me = $me; accts = $accts; usage = $usage; root = $Root; desk = [bool]$r; sessions = $list })
   }
 
   if ($path -eq '/api/restart') {
@@ -933,6 +1325,30 @@ function Handle-Request($ctx) {
     $sum = Ops-Summary $ops $me
     $m = 'Đã mở “' + $t + '” ở ' + $(if ($me) { $me } else { 'tài khoản đang đăng nhập' }) + ' — không cần khởi động lại.'
     if ($sum.accts.Count) { $m += ' Session này cũng đã được chép sang ' + $sum.text + ' (thấy khi chuyển sang).' }
+    return Send-Json $ctx 200 @{ message = $m }
+  }
+
+  if ($method -eq 'GET' -and $path -eq '/api/accounts') { return Send-Json $ctx 200 (Accounts-Info) }
+
+  if ($method -eq 'POST' -and $path -eq '/api/account-name') {
+    $b = Read-Body $ctx
+    $acct = [string](Get-Key $b 'acct'); $name = ([string](Get-Key $b 'name') -replace '[\r\n=#]', ' ').Trim()
+    if ($acct -notmatch $UuidRe) { return Send-Json $ctx 400 @{ error = 'Mã tài khoản không hợp lệ.' } }
+    if (-not $name -or $name.Length -gt 40) { return Send-Json $ctx 400 @{ error = 'Tên phải từ 1 đến 40 ký tự.' } }
+    Set-AccountName $acct $name
+    return Send-Json $ctx 200 @{ message = ('Đã đặt tên: ' + $name) }
+  }
+
+  # Vào một tài khoản đã lưu (acct) hoặc bỏ đăng nhập để đăng nhập tài khoản mới (acct rỗng)
+  if ($method -eq 'POST' -and $path -eq '/api/switch') {
+    $acct = [string](Get-Key (Read-Body $ctx) 'acct')
+    if ($acct -and $acct -notmatch $UuidRe) { return Send-Json $ctx 400 @{ error = 'Mã tài khoản không hợp lệ.' } }
+    $r = Switch-Account $acct
+    $names = Account-Labels (Desktop-Root)
+    $curName = $(if ($r.cur -and $names[$r.cur]) { $names[$r.cur] } else { 'tài khoản cũ' })
+    $m = $(if ($acct) { 'Đã vào ' + $(if ($names[$acct]) { $names[$acct] } else { 'tài khoản' }) + '.' } else { 'Claude Desktop đang ở màn đăng nhập — đăng nhập tài khoản mới (một lần), lần sau chọn trong tool là vào.' })
+    if ($r.saved) { $m += ' Đăng nhập của ' + $curName + ' đã được cất, chọn lại lúc nào cũng được.' }
+    if (-not $r.launched) { $m += ' Chưa mở lại được Claude Desktop, hãy tự mở app.' }
     return Send-Json $ctx 200 @{ message = $m }
   }
 
